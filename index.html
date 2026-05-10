@@ -1,0 +1,466 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged, 
+  signOut 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  query, 
+  deleteDoc, 
+  addDoc,
+  orderBy
+} from 'firebase/firestore';
+import { 
+  ChefHat, Utensils, Loader2, AlertCircle, Sparkles, Leaf, 
+  History, X, BookOpen, Clock, Trash2, Quote, Camera, Flame,
+  Soup, Pizza, LogOut, User, ChevronRight, ArrowRight, Lock, CheckCircle2
+} from 'lucide-react';
+
+// Konfigurasi Firebase
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'dapoer-pintar-v1';
+const apiKey = "";
+
+const cookingQuotes = [
+  "Memasak adalah seni meracik rasa.",
+  "Api kecil membuat masakan matang lebih sempurna.",
+  "Pisau yang tajam adalah sahabat terbaik koki.",
+  "Jangan lupa mencicipi masakan sebelum dihidangkan.",
+  "Resep hanyalah panduan, instingmu yang menentukan rasa.",
+  "Aroma bawang putih yang ditumis adalah parfum dapur terbaik.",
+  "Kunci masakan enak adalah bumbu yang meresap sempurna."
+];
+
+const fetchWithRetry = async (url, options, retries = 5) => {
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(res => setTimeout(res, delays[i]));
+    }
+  }
+};
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isStarted, setIsStarted] = useState(false);
+  const [ingredients, setIngredients] = useState("");
+  const [equipment, setEquipment] = useState("");
+  const [recipe, setRecipe] = useState("");
+  const [recipeImage, setRecipeImage] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingQuote, setLoadingQuote] = useState("");
+  const [error, setError] = useState("");
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // --- AUTHENTICATION LOGIC ---
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth Error:", err);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- FIRESTORE DATA LOGIC ---
+  useEffect(() => {
+    if (!user) return;
+    const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'history');
+    const unsubscribe = onSnapshot(historyRef, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setHistory(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    }, (err) => {
+      console.error("Firestore Listen Error:", err);
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    let interval;
+    if (isLoading) {
+      setLoadingQuote(cookingQuotes[Math.floor(Math.random() * cookingQuotes.length)]);
+      interval = setInterval(() => {
+        setLoadingQuote(cookingQuotes[Math.floor(Math.random() * cookingQuotes.length)]);
+      }, 3000);
+    }
+    return () => clearInterval(interval);
+  }, [isLoading]);
+
+  const generateImage = async (prompt) => {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`;
+      const result = await fetchWithRetry(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instances: [{ prompt: `Professional food photography of ${prompt}, rustic kitchen background, warm lighting` }],
+          parameters: { sampleCount: 1 }
+        })
+      });
+      return `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const handleGenerateRecipe = async () => {
+    if (!ingredients.trim()) {
+      setError("Isi dulu bahan-bahannya, Bos!");
+      return;
+    }
+    if (!user) return;
+
+    setIsLoading(true);
+    setError("");
+    setRecipe("");
+    setRecipeImage(null);
+
+    const promptText = `Bahan: ${ingredients}. Alat: ${equipment || 'Standar'}. Buat resep dengan format: ## [Nama] \n > **Deskripsi:** [Detail rasa, negara asal, dan sejarah singkat] \n **Bahan:** \n - item \n **Alat:** \n - item \n **Cara:** \n 1. step`;
+
+    try {
+      const result = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+          systemInstruction: { parts: [{ text: "Kamu adalah koki ahli sejarah kuliner." }] }
+        })
+      });
+
+      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        setRecipe(text);
+        const title = text.match(/## (.*)/)?.[1] || "Masakan Spesial";
+        const img = await generateImage(title);
+        setRecipeImage(img);
+
+        const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'history');
+        await addDoc(historyRef, {
+          title,
+          content: text,
+          image: img,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      setError("Koki sedang sibuk, coba lagi!");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const deleteHistory = async (docId) => {
+    if (!user) return;
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'users', user.uid, 'history', docId);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.error("Delete Error:", err);
+    }
+  };
+
+  const formatRecipeText = (text) => {
+    return text.split('\n').map((line, index) => {
+      if (line.startsWith('## ')) return <h2 key={index} className="text-xl md:text-2xl font-bold text-orange-800 mt-4 mb-2">{line.replace('## ', '')}</h2>;
+      if (line.startsWith('> ') || line.includes('**Deskripsi:**')) {
+        const clean = line.replace('> ', '').replace('**Deskripsi:**', '').replace(/\*\*/g, '').trim();
+        return clean ? (
+          <div key={index} className="bg-orange-50 border-l-4 border-orange-400 p-4 my-4 rounded-r-xl text-sm italic text-orange-900 leading-relaxed font-medium">
+            "{clean}"
+          </div>
+        ) : null;
+      }
+      if (line.startsWith('- ')) return <li key={index} className="ml-5 list-disc text-gray-700 mb-1 text-sm md:text-base">{line.substring(2).replace(/\*\*/g, '')}</li>;
+      if (/^\d+\./.test(line)) return <li key={index} className="ml-5 list-decimal mb-3 text-gray-700 leading-relaxed text-sm md:text-base">{line.replace(/^\d+\.\s*/, '').replace(/\*\*/g, '')}</li>;
+      if (line.startsWith('**')) return <h3 key={index} className="font-bold text-gray-800 mt-6 mb-3 text-base md:text-lg border-b border-gray-100 pb-2 flex items-center gap-2"><ChefHat size={18} className="text-orange-500"/> {line.replace(/\*\*/g, '')}</h3>;
+      return line.trim() ? <p key={index} className="text-gray-600 mb-2 leading-relaxed text-sm md:text-base">{line}</p> : null;
+    });
+  };
+
+  if (authLoading) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#FFFBF0]">
+        <Loader2 className="w-12 h-12 text-orange-500 animate-spin mb-4" />
+        <p className="text-orange-900 font-bold animate-pulse text-sm">Menyiapkan Dapur...</p>
+      </div>
+    );
+  }
+
+  if (!isStarted) {
+    return (
+      <div className="min-h-screen bg-[#FFFBF0] flex flex-col items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute top-10 left-10 opacity-10 -rotate-12"><Soup size={180} /></div>
+        <div className="absolute bottom-10 right-10 opacity-10 rotate-12"><Pizza size={200} /></div>
+        <div className="absolute top-1/2 left-1/4 opacity-5 rotate-45"><Utensils size={150} /></div>
+
+        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center relative z-10 border border-orange-100">
+          <div className="bg-orange-500 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 rotate-6 shadow-xl shadow-orange-500/30">
+            <ChefHat size={50} className="text-white" />
+          </div>
+          
+          <h1 className="text-4xl font-black text-orange-900 tracking-tighter mb-4">
+            Dapoer<span className="text-green-600">Pintar</span>
+          </h1>
+          <p className="text-gray-500 font-medium mb-10 leading-relaxed">
+            Asisten masak pintar yang tahu apa yang harus dimasak dengan bahan yang tersisa di kulkasmu.
+          </p>
+
+          <div className="space-y-4">
+            <button 
+              onClick={() => setIsStarted(true)}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-black py-5 rounded-2xl shadow-lg transition-all active:scale-95 flex items-center justify-center gap-3 group"
+            >
+              MASUK KE DAPUR
+              <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+            </button>
+            <div className="flex items-center justify-center gap-2 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+              <Lock size={12} /> Terproteksi oleh AI & Firebase
+            </div>
+          </div>
+        </div>
+        
+        <p className="mt-10 text-gray-400 text-xs font-bold">ICT CLASS 9 PROJECT © 2024</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#FFFBF0] font-sans text-gray-800 relative overflow-x-hidden animate-in fade-in duration-700">
+      
+      {/* Background Decor */}
+      <div className="fixed inset-0 opacity-[0.02] pointer-events-none select-none z-0">
+        <div className="absolute top-10 left-10 transform -rotate-12"><Soup size={120} /></div>
+        <div className="absolute bottom-20 right-10 transform rotate-12"><Utensils size={150} /></div>
+        <div className="absolute top-1/2 left-1/4"><Pizza size={100} /></div>
+      </div>
+
+      {/* Header */}
+      <header className="bg-white/90 backdrop-blur-md shadow-sm sticky top-0 z-40 border-b border-orange-100">
+        <div className="max-w-6xl mx-auto px-4 py-3 md:py-4 flex items-center justify-between">
+          <button 
+            onClick={() => setShowHistory(true)}
+            className="p-2 hover:bg-orange-50 rounded-xl transition-all relative group"
+          >
+            <History className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
+            <span className="absolute left-0 top-12 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 whitespace-nowrap z-50 font-bold">History</span>
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <div className="bg-orange-500 p-2 rounded-xl shadow-lg rotate-3 cursor-pointer" onClick={() => setIsStarted(false)}>
+              <ChefHat className="w-5 h-5 md:w-6 md:h-6 text-white" />
+            </div>
+            <h1 className="text-xl md:text-2xl font-black text-orange-900 tracking-tighter">Dapoer<span className="text-green-600">Pintar</span></h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="hidden sm:flex flex-col items-end text-[10px]">
+              <div className="flex items-center gap-1.5 text-green-600 font-black tracking-widest uppercase bg-green-50 px-2 py-0.5 rounded-full border border-green-100">
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+                CONNECTED
+              </div>
+            </div>
+            <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-orange-100 to-orange-200 rounded-full flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-orange-100">
+              <User className="w-4 h-4 md:w-5 md:h-5 text-orange-600" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-6 md:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 relative z-10">
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white rounded-3xl shadow-xl shadow-orange-900/5 p-5 md:p-6 border border-orange-50">
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-green-100 p-1.5 rounded-lg text-green-700"><Utensils size={18} /></div>
+                  <h2 className="font-bold text-gray-800">Isi Kulkas</h2>
+                </div>
+                <textarea
+                  className="w-full h-24 md:h-28 p-4 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-orange-400 focus:bg-white outline-none transition-all text-sm placeholder:text-gray-400 resize-none"
+                  placeholder="Misal: telur, tempe, nasi..."
+                  value={ingredients}
+                  onChange={(e) => setIngredients(e.target.value)}
+                ></textarea>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-blue-100 p-1.5 rounded-lg text-blue-700"><Flame size={18} /></div>
+                  <h2 className="font-bold text-gray-800">Alat Masak</h2>
+                </div>
+                <textarea
+                  className="w-full h-20 md:h-24 p-4 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-blue-400 focus:bg-white outline-none transition-all text-sm placeholder:text-gray-400 resize-none"
+                  placeholder="Misal: Rice Cooker, Oven, Blender..."
+                  value={equipment}
+                  onChange={(e) => setEquipment(e.target.value)}
+                ></textarea>
+              </div>
+            </div>
+
+            {error && <p className="text-red-500 text-xs mt-4 flex items-center gap-1 font-medium bg-red-50 p-2 rounded-lg"><AlertCircle size={14}/> {error}</p>}
+
+            <button
+              onClick={handleGenerateRecipe}
+              disabled={isLoading}
+              className="w-full mt-6 bg-orange-500 hover:bg-orange-600 text-white font-black py-4 rounded-2xl shadow-lg shadow-orange-500/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 text-sm md:text-base"
+            >
+              {isLoading ? <Loader2 className="animate-spin" /> : <Sparkles size={20} />}
+              {isLoading ? "Meracik Rasa..." : "BUAT RESEP SEKARANG"}
+            </button>
+          </div>
+          
+          <div className="bg-orange-100/40 p-4 rounded-2xl border border-orange-200 border-dashed hidden lg:block">
+            <p className="text-[11px] text-orange-800 font-semibold leading-relaxed">
+              💡 PRO TIP: Semakin detail alat yang kamu tulis (misal: "hanya kompor"), AI akan semakin pintar mencarikan cara masak yang sesuai!
+            </p>
+          </div>
+        </div>
+
+        <div className="lg:col-span-8">
+          <div className="bg-white rounded-3xl shadow-2xl shadow-orange-900/10 min-h-[400px] border border-orange-50 overflow-hidden">
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-[500px] p-8 text-center animate-in fade-in duration-500">
+                <div className="relative mb-8">
+                  <div className="absolute inset-0 bg-orange-200 blur-3xl rounded-full opacity-30 animate-pulse"></div>
+                  <Loader2 className="w-12 h-12 md:w-16 md:h-16 text-orange-500 animate-spin relative z-10" />
+                </div>
+                <div className="bg-orange-50 p-6 rounded-2xl border border-orange-100 max-w-sm relative shadow-sm mx-auto">
+                  <Quote className="absolute -top-3 -left-3 text-orange-200 w-8 h-8" />
+                  <p className="text-orange-900 font-medium italic text-base md:text-lg leading-snug">"{loadingQuote}"</p>
+                </div>
+              </div>
+            ) : recipe ? (
+              <div className="animate-in slide-in-from-bottom-8 duration-500">
+                <div className="w-full h-56 md:h-80 bg-gray-100 relative group">
+                  {recipeImage ? (
+                    <img src={recipeImage} alt="Masakan" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-gray-50">
+                      <Camera size={40} className="mb-2 opacity-20" />
+                      <p className="text-xs">Visual sedang disiapkan...</p>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                  <div className="absolute bottom-4 left-6 right-6 md:bottom-8 md:left-10 md:right-10">
+                    <span className="bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest mb-2 inline-block shadow-lg">Rekomendasi DapoerPintar</span>
+                    <h2 className="text-2xl md:text-4xl font-black text-white drop-shadow-lg leading-tight">{recipe.match(/## (.*)/)?.[1]}</h2>
+                  </div>
+                </div>
+
+                <div className="p-6 md:p-10">
+                  {formatRecipeText(recipe)}
+                  <div className="mt-12 pt-6 border-t border-dashed border-gray-200 flex items-center justify-between">
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                      <ChefHat size={14} className="text-orange-200"/> DapoerPintar AI Engine
+                    </p>
+                    <button onClick={() => window.print()} className="text-orange-600 text-xs font-black hover:text-orange-700 transition-colors bg-orange-50 px-4 py-2 rounded-lg">CETAK</button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[500px] p-8 text-center">
+                <div className="w-20 h-20 md:w-24 md:h-24 bg-orange-50 rounded-full flex items-center justify-center mb-6 shadow-inner ring-4 ring-white">
+                  <Soup size={40} className="text-orange-200" />
+                </div>
+                <h3 className="text-xl md:text-2xl font-black text-gray-800">Dapur Siap!</h3>
+                <p className="max-w-xs mt-3 text-sm text-gray-500 leading-relaxed mx-auto font-medium">Input bahan dan alat di kiri, AI akan menyulapnya jadi resep lezat.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {/* History Sidebar */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={() => setShowHistory(false)}></div>
+          <div className="relative w-full max-w-sm md:max-w-md bg-white h-full shadow-2xl p-6 overflow-y-auto animate-in slide-in-from-right duration-300">
+            <div className="flex items-center justify-between mb-8 pb-4 border-b sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-3">
+                <div className="bg-orange-100 p-2 rounded-xl text-orange-600"><History /></div>
+                <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tighter">Riwayat Masak</h2>
+              </div>
+              <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors"><X /></button>
+            </div>
+
+            {history.length === 0 ? (
+              <div className="text-center py-24 opacity-40">
+                <Clock className="w-16 h-16 mx-auto mb-4" />
+                <p className="font-bold">Belum ada masakan...</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {history.map((item) => (
+                  <div key={item.id} className="group relative bg-orange-50/20 rounded-2xl p-4 border border-orange-100 hover:border-orange-300 hover:bg-white transition-all cursor-pointer shadow-sm active:scale-95" onClick={() => { setRecipe(item.content); setRecipeImage(item.image); setShowHistory(false); window.scrollTo(0,0); }}>
+                    <div className="flex gap-4">
+                      {item.image ? (
+                        <img src={item.image} className="w-16 h-16 md:w-20 md:h-20 rounded-xl object-cover shadow-sm border border-white" alt="" />
+                      ) : (
+                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-xl bg-orange-100 flex items-center justify-center text-orange-300"><Utensils size={24}/></div>
+                      )}
+                      <div className="flex-1 min-w-0 pr-6">
+                        <h4 className="font-bold text-gray-900 text-sm md:text-base leading-tight mb-1 truncate">{item.title}</h4>
+                        <p className="text-[10px] text-gray-400 flex items-center gap-1 font-bold"><Clock size={10}/> {new Date(item.createdAt).toLocaleDateString()}</p>
+                        <div className="mt-2 flex items-center text-orange-600 text-[10px] font-black uppercase tracking-tighter">
+                          Buka Resep <ChevronRight size={12}/>
+                        </div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); deleteHistory(item.id); }}
+                      className="absolute top-4 right-4 p-1.5 text-gray-300 hover:text-red-500 opacity-100 md:opacity-0 group-hover:opacity-100 transition-all bg-white md:bg-transparent rounded-lg shadow-sm border border-gray-100"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Footer Mobile Nav - Sekarang Hanya Ada Tombol Dapur */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-orange-100 px-6 py-3 flex justify-center items-center z-40">
+        <button onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} className="flex flex-col items-center gap-1">
+          <div className="bg-orange-500 p-2 rounded-xl text-white shadow-md">
+            <ChefHat size={20} />
+          </div>
+          <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Dapur Utama</span>
+        </button>
+      </div>
+      <div className="lg:hidden h-16"></div>
+    </div>
+  );
+}
