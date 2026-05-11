@@ -3,41 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DapoerPintar - Asisten Dapur AI</title>
-    <!-- Tailwind CSS & FontAwesome -->
+    <title>DapoerPintar AI - Standalone Pro Edition</title>
+    
+    <!-- Tailwind CSS (Desain Modern) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons (Dekorasi Dapur) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Google Fonts (Typography Premium) -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         body {
             font-family: 'Plus Jakarta Sans', sans-serif;
             background-color: #FFFBF0;
             color: #1a1a1a;
+            scroll-behavior: smooth;
             overflow-x: hidden;
         }
 
+        /* Dekorasi Background Dapur */
+        .kitchen-bg {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            opacity: 0.3;
+            pointer-events: none;
+            background-color: #FFFBF0;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(249, 115, 22, 0.1) 1px, transparent 0),
+                linear-gradient(rgba(249, 115, 22, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(249, 115, 22, 0.02) 1px, transparent 1px);
+            background-size: 30px 30px, 120px 120px, 120px 120px;
+        }
+
+        /* Animasi Ikon Melayang */
+        .floating {
+            animation: floating 6s ease-in-out infinite;
+        }
+        @keyframes floating {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
         .recipe-content blockquote {
-            background: #fff7ed;
-            border-left: 5px solid #fb923c;
+            background-color: #fff7ed;
+            border-left: 6px solid #f97316;
             padding: 1.5rem;
             margin: 1.5rem 0;
             font-style: italic;
             border-radius: 0 1.5rem 1.5rem 0;
             color: #7c2d12;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+            line-height: 1.8;
         }
 
-        .loader {
-            width: 48px;
-            height: 48px;
-            border: 5px solid #fb923c;
+        /* Desain Langkah-Langkah Per Poin */
+        .step-item {
+            position: relative;
+            padding-left: 4rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 3rem;
+            height: 3rem;
+            background: #f97316;
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2rem;
+            box-shadow: 0 8px 16px rgba(249, 115, 22, 0.3);
+        }
+
+        /* Loader Chef */
+        .chef-loader {
+            width: 70px;
+            height: 70px;
+            border: 8px solid #f97316;
             border-bottom-color: transparent;
             border-radius: 50%;
             display: inline-block;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
+            animation: rotation 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
         }
 
         @keyframes rotation {
@@ -45,24 +99,17 @@
             100% { transform: rotate(360deg); }
         }
 
-        .fade-in { animation: fadeIn 0.6s ease-out forwards; }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
-        }
-
-        .logo-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.75rem;
         }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <!-- React Dependencies -->
+    <!-- React & Babel Scripts -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -70,339 +117,258 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        const apiKey = ""; // API Key otomatis disediakan oleh sistem lingkungan
-        
-        const cookingQuotes = [
-            "Memasak adalah seni meracik rasa dengan cinta.",
-            "Bumbu terbaik adalah kesabaran dan ketelitian.",
-            "Rahasia masakan enak ada pada kesegaran bahannya.",
-            "Dapur adalah tempat di mana keajaiban dimulai.",
-            "Resep hanyalah peta, kamulah pengemudi rasanya.",
-            "Kunci kelezatan adalah bumbu yang meresap sempurna."
-        ];
+        const Icon = ({ name, size = 24, className = "", style = {} }) => {
+            return <i data-lucide={name} className={className} style={{ width: size, height: size, ...style }}></i>;
+        };
 
         function App() {
+            const [apiKey, setApiKey] = useState(() => localStorage.getItem("GEMINI_API_KEY") || "");
+            const [isApiKeySaved, setIsApiKeySaved] = useState(!!apiKey);
             const [isStarted, setIsStarted] = useState(false);
             const [ingredients, setIngredients] = useState("");
             const [equipment, setEquipment] = useState("");
             const [recipe, setRecipe] = useState("");
             const [recipeImage, setRecipeImage] = useState(null);
-            const [recipeDifficulty, setRecipeDifficulty] = useState("Mudah");
+            const [difficulty, setDifficulty] = useState("Sedang");
             const [isLoading, setIsLoading] = useState(false);
-            const [loadingQuote, setLoadingQuote] = useState("");
-            const [history, setHistory] = useState([]);
+            const [loadingText, setLoadingText] = useState("");
+            const [history, setHistory] = useState(() => {
+                const saved = localStorage.getItem("RECIPE_HISTORY");
+                return saved ? JSON.parse(saved) : [];
+            });
             const [showHistory, setShowHistory] = useState(false);
 
+            // Perbarui Ikon Lucide setiap render
             useEffect(() => {
-                let interval;
-                if (isLoading) {
-                    setLoadingQuote(cookingQuotes[Math.floor(Math.random() * cookingQuotes.length)]);
-                    interval = setInterval(() => {
-                        setLoadingQuote(cookingQuotes[Math.floor(Math.random() * cookingQuotes.length)]);
-                    }, 3000);
-                }
-                return () => clearInterval(interval);
-            }, [isLoading]);
+                if (window.lucide) window.lucide.createIcons();
+            });
 
-            const generateImage = async (prompt) => {
-                try {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${apiKey}`, {
-                        method: 'POST',
-                        body: JSON.stringify({ 
-                            instances: { prompt: `Professional food photography of ${prompt}, gourmet plating, warm ambient kitchen lighting, 8k high resolution, appetizing` }, 
-                            parameters: { sampleCount: 1 } 
-                        })
-                    });
-                    const data = await res.json();
-                    if (data.predictions?.[0]) {
-                        return `data:image/png;base64,${data.predictions[0].bytesBase64Encoded}`;
-                    }
-                    return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80";
-                } catch (e) { 
-                    return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"; 
+            useEffect(() => {
+                localStorage.setItem("RECIPE_HISTORY", JSON.stringify(history));
+            }, [history]);
+
+            const saveApiKey = (key) => {
+                if (key.trim()) {
+                    localStorage.setItem("GEMINI_API_KEY", key.trim());
+                    setApiKey(key.trim());
+                    setIsApiKeySaved(true);
                 }
             };
 
-            const handleGenerate = async () => {
+            const clearApiKey = () => {
+                localStorage.removeItem("GEMINI_API_KEY");
+                setApiKey("");
+                setIsApiKeySaved(false);
+            };
+
+            const handleGenerate = async (isRegenerate = false) => {
                 if (!ingredients.trim()) return;
                 setIsLoading(true);
-                setRecipe("");
+                if (!isRegenerate) setRecipe("");
                 setRecipeImage(null);
-                setRecipeDifficulty("Mudah");
+                setLoadingText("Menjelajahi sejarah kuliner...");
 
-                const prompt = `Kamu adalah koki AI yang ramah. Bahan: ${ingredients}. Alat: ${equipment || 'Standar'}.
-Buat resep yang lezat dengan bahasa Indonesia yang sangat santai, mudah dimengerti, dan TIDAK kaku.
-JANGAN gunakan tanda bintang (**) sama sekali di seluruh jawabanmu.
+                const prompt = `Bahan: ${ingredients}. Alat: ${equipment || 'Standar Dapur'}.
+Buatlah resep masakan yang UNIK dan EDUKATIF.
 
-WAJIB ikuti format persis di bawah ini:
-LEVEL: [Pilih salah satu: Mudah / Sedang / Sulit]
-## [Nama Masakan]
-> [Tuliskan cerita singkat tentang asal usul masakan ini dan rasanya dengan bahasa yang santai seperti mengobrol biasa]
-SUB: Bahan-bahan
-- item
-SUB: Cara Memasak
-1. step
-SUB: Tips Koki
-- tips`;
+STRUKTUR JAWABAN (WAJIB FORMAT INI):
+JUDUL: [Nama Makanan]
+LEVEL: [Mudah/Sedang/Sulit]
+ASAL-USUL: [Cerita detail penemu, asal negara/daerah, dan keasliannya]
+BAHAN:
+- [Item dengan ukuran]
+LANGKAH:
+1. [Langkah 1: Jelas]
+2. [Langkah 2: Suhu/Waktu]
+(Dst...)
+TIPS:
+- [Tips Rahasia]
+
+INSTRUKSI: Jangan gunakan tanda bintang (**). Buat langkah-langkah per poin agar tidak padat.`;
 
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                     });
+                    
                     const data = await response.json();
-                    let text = data.candidates[0].content.parts[0].text;
+                    if (data.error) throw new Error(data.error.message);
+                    
+                    const text = data.candidates[0].content.parts[0].text.replace(/\*/g, '');
+                    setRecipe(text);
 
-                    // Mengambil Level Kesulitan
-                    const levelMatch = text.match(/LEVEL:\s*([^\n\r]+)/i);
-                    let level = "Mudah";
-                    if (levelMatch) {
-                        const rawLevel = levelMatch[1].trim().toLowerCase();
-                        if (rawLevel.includes("sedang")) level = "Sedang";
-                        if (rawLevel.includes("sulit")) level = "Sulit";
-                    }
-                    setRecipeDifficulty(level);
+                    const titleMatch = text.match(/JUDUL:\s*(.*)/);
+                    const title = titleMatch ? titleMatch[1].trim() : "Hidangan";
+                    
+                    const diffMatch = text.match(/LEVEL:\s*(Mudah|Sedang|Sulit)/i);
+                    const level = diffMatch ? diffMatch[1] : "Sedang";
+                    setDifficulty(level);
 
-                    // Membersihkan teks dari teks LEVEL dan semua bintang-bintang markdown
-                    let cleanText = text.replace(/LEVEL:.*\n?/i, '').trim();
-                    cleanText = cleanText.replace(/\*/g, ''); // Hapus semua bintang agar tidak ada markdown bocor
-                    setRecipe(cleanText);
+                    // Gambar yang disesuaikan secara dinamis
+                    const cleanTitle = title.replace(/Hidangan|Masakan|Legendaris/gi, '').trim();
+                    const searchTag = cleanTitle.split(' ')[0].replace(/[^a-zA-Z]/g, '');
+                    const imgUrl = `https://loremflickr.com/1200/800/food,dish,${encodeURIComponent(searchTag)}/all`;
+                    setRecipeImage(imgUrl);
 
-                    // Mengambil judul untuk membuat gambar
-                    const titleMatch = cleanText.match(/## (.*)/);
-                    const title = titleMatch ? titleMatch[1].trim() : "Hidangan Spesial";
-                    const img = await generateImage(title);
-                    setRecipeImage(img);
+                    setHistory(prev => [{
+                        id: Date.now(), title, content: text, image: imgUrl, difficulty: level, createdAt: Date.now()
+                    }, ...prev]);
 
-                    // Simpan ke riwayat
-                    setHistory(prev => [{ title, content: cleanText, image: img, difficulty: level, date: new Date().toLocaleTimeString() }, ...prev]);
-                } catch (err) {
-                    setRecipe("## Ups! Dapur Sedang Sibuk\nMohon maaf, koki AI kami sedang kewalahan. Silakan coba lagi beberapa saat lagi.");
+                } catch (e) {
+                    setRecipe("JUDUL: Server Sibuk\nASAL-USUL: Error Koneksi\nLANGKAH:\n1. Coba periksa API Key Anda.");
                 } finally {
                     setIsLoading(false);
                 }
             };
 
-            const getDifficultyColor = (level) => {
-                if (level === "Sulit") return "bg-red-500";
-                if (level === "Sedang") return "bg-yellow-500";
-                return "bg-green-500"; // Mudah
+            const KitchenDecor = () => (
+                <div className="kitchen-bg">
+                    <Icon name="utensils" size={200} className="floating absolute top-[5%] left-[-2%] opacity-20" />
+                    <Icon name="soup" size={150} className="floating absolute top-[40%] right-[-3%] opacity-20" />
+                    <Icon name="chef-hat" size={280} className="floating absolute bottom-[-5%] left-[5%] opacity-20" />
+                    <Icon name="flame" size={180} className="floating absolute top-[20%] right-[10%] opacity-20" />
+                    <Icon name="coffee" size={120} className="floating absolute middle left-[20%] opacity-10" />
+                </div>
+            );
+
+            const LevelBadge = ({ level }) => {
+                const colors = { Mudah: "bg-green-500", Sedang: "bg-yellow-500", Sulit: "bg-red-500" };
+                return <div className={`${colors[level] || "bg-gray-500"} text-white text-[10px] font-black px-4 py-2 rounded-full shadow-lg uppercase`}>Level: {level}</div>;
             };
+
+            if (!isApiKeySaved) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4">
+                        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center border border-orange-100 fade-in">
+                            <Icon name="key" size={50} className="text-orange-500 mx-auto mb-6" />
+                            <h1 className="text-2xl font-black text-orange-950 mb-2 tracking-tight">Login API Key</h1>
+                            <p className="text-gray-400 mb-8 text-sm font-medium">Masukkan Gemini API Key Anda untuk mulai memasak.</p>
+                            <input type="password" id="api-key" placeholder="Paste API Key di sini..." className="w-full p-5 bg-gray-50 border-2 border-transparent focus:border-orange-500 rounded-2xl outline-none mb-6 font-mono text-sm" />
+                            <button onClick={() => saveApiKey(document.getElementById('api-key').value)} className="w-full bg-orange-500 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-orange-600 transition-all active:scale-95">Masuk Sekarang</button>
+                        </div>
+                    </div>
+                );
+            }
 
             if (!isStarted) {
                 return (
-                    <div className="min-h-screen flex items-center justify-center p-6 fade-in">
-                        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center border border-orange-100">
-                            
-                            {/* LOGO BARU DAPOERPINTAR */}
-                            <div className="relative mx-auto mb-10 w-32 h-32 flex items-center justify-center group cursor-pointer">
-                                {/* Efek Cahaya Glow di belakang */}
-                                <div className="absolute inset-0 bg-orange-500 rounded-[35px] blur-xl opacity-40 group-hover:opacity-60 transition-opacity duration-500 animate-pulse"></div>
-                                
-                                {/* Kotak Utama Logo */}
-                                <div className="relative w-full h-full bg-gradient-to-br from-orange-400 via-orange-500 to-red-500 rounded-[35px] shadow-2xl flex items-center justify-center border-4 border-white/60 transform -rotate-6 group-hover:rotate-0 transition-transform duration-500 overflow-hidden">
-                                    {/* Dekorasi Cahaya dalam kotak */}
-                                    <div className="absolute -top-4 -right-4 w-16 h-16 bg-white/30 rounded-full blur-md"></div>
-                                    <div className="absolute -bottom-4 -left-4 w-16 h-16 bg-black/10 rounded-full blur-md"></div>
-                                    
-                                    {/* Ikon Alat Masak (Dapoer) */}
-                                    <i className="fas fa-utensils text-white text-5xl drop-shadow-lg z-10 transform group-hover:scale-110 transition-transform duration-300"></i>
-                                    
-                                    {/* Ikon Bintang Ajaib (Pintar/AI) */}
-                                    <i className="fas fa-sparkles text-yellow-300 text-3xl absolute top-3 right-3 z-20 animate-bounce drop-shadow-md"></i>
-                                </div>
-                                
-                                {/* Badge AI di bawah logo */}
-                                <div className="absolute -bottom-4 bg-white text-orange-600 text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-xl border-2 border-orange-100 z-30">
-                                    AI ENGINE
-                                </div>
+                    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+                        <KitchenDecor />
+                        <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center border border-orange-100 fade-in z-10">
+                            <div className="relative mb-10 w-32 h-32 mx-auto bg-gradient-to-br from-orange-400 to-red-500 rounded-[35px] flex items-center justify-center shadow-2xl rotate-[-6deg]">
+                                <Icon name="utensils" size={50} className="text-white" />
                             </div>
-                            {/* AKHIR LOGO BARU */}
-
-                            <h1 className="text-4xl font-black text-orange-900 mb-4 tracking-tighter">Dapoer<span className="text-green-600">Pintar</span></h1>
-                            <p className="text-gray-500 font-medium mb-12">Sulap bahan makanan yang tersisa di kulkasmu menjadi hidangan istimewa secara instan.</p>
-                            <button onClick={() => setIsStarted(true)} className="w-full bg-orange-500 text-white font-black py-5 rounded-2xl shadow-lg hover:bg-orange-600 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg">
-                                MASUK KE DAPUR <i className="fas fa-arrow-right"></i>
-                            </button>
+                            <h1 className="text-4xl font-black text-orange-950 mb-4 tracking-tighter">Dapoer<span className="text-green-600">Pintar</span></h1>
+                            <p className="text-gray-500 mb-10 font-semibold px-4 leading-relaxed">Asisten masak cerdas dengan resep teliti & sejarah kuliner unik.</p>
+                            <button onClick={() => setIsStarted(true)} className="w-full bg-orange-500 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 active:scale-95">MULAI RACIK <Icon name="arrow-right" size={20} /></button>
+                            <button onClick={clearApiKey} className="mt-8 text-xs font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">Ganti API Key</button>
                         </div>
                     </div>
                 );
             }
 
             return (
-                <div className="min-h-screen flex flex-col fade-in">
-                    <header className="bg-white/80 backdrop-blur-md p-4 border-b sticky top-0 z-50 flex justify-between items-center px-4 md:px-8 shadow-sm">
-                        <button onClick={() => setShowHistory(true)} className="w-12 h-12 hover:bg-orange-50 rounded-xl text-orange-600 transition-all flex items-center justify-center">
-                            <i className="fas fa-history text-xl"></i>
-                        </button>
-                        
-                        <div className="logo-container cursor-pointer group" onClick={() => setIsStarted(false)}>
-                            {/* Logo Mini di Header */}
-                            <div className="bg-gradient-to-br from-orange-400 to-red-500 p-2.5 rounded-xl shadow-md -rotate-3 relative overflow-hidden group-hover:rotate-0 transition-all">
-                                <i className="fas fa-utensils text-white relative z-10"></i>
-                                <i className="fas fa-sparkles text-yellow-300 text-[10px] absolute top-0.5 right-0.5 z-20 animate-pulse"></i>
+                <div className="min-h-screen flex flex-col relative">
+                    <KitchenDecor />
+                    <header className="bg-white/80 backdrop-blur-lg border-b p-4 sticky top-0 z-50 flex justify-between items-center px-6 md:px-16 shadow-sm">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => setShowHistory(true)} className="p-3 bg-orange-50 text-orange-500 rounded-2xl hover:bg-orange-100 transition-colors"><Icon name="history" /></button>
+                            <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-full border border-green-100">
+                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_green]"></div>
+                                <span className="text-[10px] font-black text-green-700 tracking-widest">CONNECTED</span>
                             </div>
-                            <h1 className="text-xl md:text-2xl font-black text-orange-900 tracking-tighter">
-                                Dapoer<span className="text-green-600">Pintar</span>
-                            </h1>
                         </div>
-
-                        <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 border border-orange-200 shadow-sm">
-                            <i className="fas fa-user"></i>
-                        </div>
+                        <h1 className="text-2xl font-black text-orange-950 cursor-pointer" onClick={() => setIsStarted(false)}>Dapoer<span className="text-green-600">Pintar</span></h1>
+                        <button onClick={clearApiKey} className="p-3 bg-gray-100 text-gray-400 rounded-2xl hover:text-red-500"><Icon name="key" size={20} /></button>
                     </header>
 
-                    <main className="max-w-7xl mx-auto p-4 md:p-10 grid grid-cols-1 lg:grid-cols-12 gap-10 w-full">
-                        {/* Panel Input */}
-                        <div className="lg:col-span-4 space-y-6">
-                            <div className="bg-white p-8 rounded-[35px] shadow-xl border border-orange-50 sticky top-28">
-                                <h3 className="font-bold text-gray-800 mb-8 flex items-center gap-3 text-lg">
-                                    <i className="fas fa-utensils text-orange-500"></i> Persiapan Memasak
-                                </h3>
-                                <div className="space-y-8">
-                                    <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block">Apa isi kulkasmu?</label>
-                                        <textarea 
-                                            className="w-full h-36 p-5 bg-gray-50 rounded-3xl border-2 border-transparent focus:border-orange-400 focus:bg-white outline-none transition-all text-sm font-medium resize-none shadow-inner" 
-                                            placeholder="Contoh: Telur, Nasi, Sosis, Daun Bawang..." 
-                                            value={ingredients} 
-                                            onChange={(e) => setIngredients(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 block">Alat masak yang tersedia?</label>
-                                        <input 
-                                            className="w-full p-5 bg-gray-50 rounded-3xl border-2 border-transparent focus:border-green-400 focus:bg-white outline-none transition-all text-sm font-medium shadow-inner" 
-                                            placeholder="Contoh: Wajan, Rice Cooker, Oven..." 
-                                            value={equipment} 
-                                            onChange={(e) => setEquipment(e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={handleGenerate} 
-                                    disabled={isLoading || !ingredients.trim()} 
-                                    className="w-full mt-10 bg-orange-500 text-white font-black py-5 rounded-3xl shadow-xl hover:bg-orange-600 disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-3 text-lg"
-                                >
-                                    {isLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-wand-sparkles"></i>}
-                                    {isLoading ? "MERACIK RASA..." : "BUAT RESEP"}
+                    <main className="max-w-7xl mx-auto p-4 md:p-12 grid grid-cols-1 lg:grid-cols-12 gap-10 w-full mb-20 z-10">
+                        <div className="lg:col-span-4">
+                            <div className="bg-white p-8 rounded-[40px] shadow-2xl border border-orange-50 lg:sticky lg:top-32">
+                                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">Ramuan Bahan</h3>
+                                <textarea className="w-full h-44 p-5 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-orange-500 outline-none transition-all text-sm font-semibold shadow-inner resize-none mb-6" placeholder="Bahan apa yang kamu punya?" value={ingredients} onChange={(e) => setIngredients(e.target.value)} />
+                                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-4">Peralatan</h3>
+                                <input className="w-full p-5 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-green-500 outline-none text-sm font-semibold shadow-inner mb-8" placeholder="Alat dapur yang tersedia..." value={equipment} onChange={(e) => setEquipment(e.target.value)} />
+                                <button onClick={() => handleGenerate(false)} disabled={isLoading || !ingredients.trim()} className="w-full bg-orange-500 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 hover:bg-orange-600 active:scale-95 disabled:opacity-50">
+                                    {isLoading ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="wand-2" />}
+                                    {isLoading ? "MERAMU..." : "Racik Resep"}
                                 </button>
                             </div>
                         </div>
 
-                        {/* Panel Resep */}
                         <div className="lg:col-span-8">
-                            <div className="bg-white rounded-[45px] shadow-2xl border border-orange-50 min-h-[600px] overflow-hidden relative">
-                                {isLoading ? (
-                                    <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-10 md:p-20 text-center animate-in fade-in duration-500">
-                                        <span className="loader mb-10"></span>
-                                        <div className="max-w-sm bg-orange-50 p-8 rounded-[30px] border border-orange-100 shadow-sm relative">
-                                            <i className="fas fa-quote-left text-orange-200 text-3xl absolute -top-4 -left-4"></i>
-                                            <p className="text-orange-950 font-bold italic text-lg md:text-xl leading-relaxed">"{loadingQuote}"</p>
+                            {isLoading ? (
+                                <div className="bg-white rounded-[50px] shadow-2xl h-[600px] flex flex-col items-center justify-center p-10 text-center">
+                                    <div className="chef-loader mb-10"></div>
+                                    <h2 className="text-2xl font-black text-orange-950 mb-4 animate-pulse">Menelusuri Warisan Kuliner...</h2>
+                                    <p className="text-gray-400 italic">"{loadingText}"</p>
+                                </div>
+                            ) : recipe ? (
+                                <div className="bg-white rounded-[50px] shadow-2xl overflow-hidden border border-orange-50 fade-in">
+                                    <div className="relative h-[450px]">
+                                        {recipeImage && <img src={recipeImage} className="w-full h-full object-cover" />}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                                        <div className="absolute top-10 right-10"><LevelBadge level={difficulty} /></div>
+                                        <div className="absolute bottom-10 left-10 right-10">
+                                            <h2 className="text-3xl md:text-5xl font-black text-white drop-shadow-2xl mb-8">{recipe.match(/JUDUL:\s*(.*)/)?.[1]}</h2>
+                                            <button onClick={() => handleGenerate(true)} className="bg-white text-orange-600 font-black px-6 py-3 rounded-2xl shadow-xl flex items-center gap-3 text-sm hover:bg-orange-50 transition-all"><Icon name="rotate-ccw" size={16} /> BERI RESEP YANG LAIN</button>
                                         </div>
                                     </div>
-                                ) : recipe ? (
-                                    <div className="fade-in">
-                                        <div className="relative h-[300px] md:h-[450px]">
-                                            {recipeImage ? (
-                                                <img src={recipeImage} className="w-full h-full object-cover" alt="Visualisasi Masakan" />
-                                            ) : (
-                                                <div className="w-full h-full bg-orange-100 flex items-center justify-center">
-                                                    <i className="fas fa-image text-5xl text-orange-200"></i>
+                                    <div className="p-8 md:p-16 space-y-12">
+                                        {recipe.split('\n').map((line, idx) => {
+                                            const l = line.trim();
+                                            if (!l || l.startsWith('JUDUL:') || l.startsWith('LEVEL:')) return null;
+                                            if (l.startsWith('ASAL-USUL:')) return (
+                                                <div key={idx} className="bg-orange-50/50 p-8 rounded-[35px] border border-orange-100 flex gap-6 items-start">
+                                                    <Icon name="globe" className="text-orange-900 mt-1 shrink-0" size={30} />
+                                                    <div>
+                                                        <h4 className="text-[10px] font-black text-orange-900 uppercase tracking-widest mb-2">History & Origin</h4>
+                                                        <p className="text-gray-700 italic text-lg leading-relaxed">{l.replace('ASAL-USUL:', '')}</p>
+                                                    </div>
                                                 </div>
-                                            )}
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-                                            
-                                            {/* Label Kesulitan */}
-                                            <div className="absolute top-6 left-6 md:top-8 md:left-8">
-                                                <div className={`${getDifficultyColor(recipeDifficulty)} text-white px-5 py-2 rounded-full font-black text-sm uppercase tracking-widest shadow-xl flex items-center gap-2 border border-white/20 backdrop-blur-sm`}>
-                                                    <i className="fas fa-fire-burner"></i> Level: {recipeDifficulty}
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="absolute bottom-8 left-8 md:bottom-10 md:left-10">
-                                                <span className="bg-white/20 backdrop-blur-md text-white text-[10px] font-black px-5 py-2 rounded-full uppercase tracking-widest border border-white/30">Rekomendasi Chef AI</span>
-                                            </div>
-                                        </div>
-
-                                        <div className="p-8 md:p-16 recipe-content">
-                                            {recipe.split('\n').map((line, i) => {
-                                                const cleanLine = line.trim();
-                                                
-                                                if (cleanLine.startsWith('##')) {
-                                                    return <h2 key={i} className="text-3xl font-black text-orange-900 mt-2 mb-6">{cleanLine.replace('##', '').trim()}</h2>;
-                                                }
-                                                if (cleanLine.startsWith('>')) {
-                                                    return <blockquote key={i}>{cleanLine.replace('>', '').trim()}</blockquote>;
-                                                }
-                                                if (cleanLine.startsWith('SUB:')) {
-                                                    return <h3 key={i} className="text-xl font-black text-gray-800 mt-10 mb-5 border-b-2 border-orange-100 pb-3 flex items-center gap-3"><i className="fas fa-utensils text-orange-500"></i> {cleanLine.replace('SUB:', '').trim()}</h3>;
-                                                }
-                                                if (cleanLine.startsWith('-')) {
-                                                    return <li key={i} className="flex gap-3 text-gray-700 font-medium mb-3"><i className="fas fa-check-circle text-orange-400 mt-1"></i> {cleanLine.replace('-', '').trim()}</li>;
-                                                }
-                                                if (/^\d+\./.test(cleanLine)) {
-                                                    return <li key={i} className="flex gap-4 mb-5 text-gray-700 font-medium"><span className="w-8 h-8 rounded-full bg-orange-500 text-white flex-shrink-0 flex items-center justify-center font-bold text-sm mt-0.5">{cleanLine.match(/^\d+/)[0]}</span> <span className="pt-1">{cleanLine.replace(/^\d+\.\s*/, '').trim()}</span></li>;
-                                                }
-                                                if (cleanLine === "") {
-                                                    return <div key={i} className="h-2" />;
-                                                }
-                                                
-                                                return <p key={i} className="text-gray-600 leading-relaxed mb-4 text-lg">{cleanLine}</p>;
-                                            })}
-                                        </div>
+                                            );
+                                            if (l.match(/^(BAHAN|LANGKAH|TIPS)/)) return <h4 key={idx} className="text-2xl font-black text-orange-950 pt-8 flex items-center gap-4"><span className="w-12 h-1.5 bg-orange-500 rounded-full"></span>{l.replace(':', '')}</h4>;
+                                            if (l.startsWith('-')) return <div key={idx} className="bg-gray-50 p-5 rounded-2xl flex gap-4 items-start border border-gray-100"><Icon name="check-circle" className="text-orange-500 mt-1 shrink-0" size={20} /><span className="text-gray-700 font-semibold">{l.replace('-', '')}</span></div>;
+                                            if (/^\d+\./.test(l)) {
+                                                const num = l.match(/^\d+/)[0];
+                                                return <div key={idx} className="step-item"><div className="step-number">{num}</div><p className="bg-white border-2 border-orange-50 p-6 rounded-3xl text-gray-700 font-medium text-lg leading-relaxed shadow-sm">{l.replace(/^\d+\.\s*/, '')}</p></div>;
+                                            }
+                                            return <p key={idx} className="text-gray-600 text-lg leading-relaxed">{l}</p>;
+                                        })}
                                     </div>
-                                ) : (
-                                    <div className="h-full min-h-[600px] flex flex-col items-center justify-center p-10 md:p-20 opacity-30 text-center">
-                                        <div className="w-24 h-24 md:w-32 md:h-32 bg-orange-100 rounded-full flex items-center justify-center mb-8">
-                                            <i className="fas fa-utensils text-5xl md:text-6xl text-orange-400"></i>
-                                        </div>
-                                        <h3 className="text-2xl md:text-3xl font-black text-gray-800 tracking-widest uppercase">Mulai Masak!</h3>
-                                        <p className="mt-4 font-bold text-gray-500 max-w-sm">Masukkan bahan makanan yang ada di samping, dan AI akan meracik resep lezat khusus untukmu.</p>
-                                    </div>
-                                )}
-                            </div>
+                                </div>
+                            ) : (
+                                <div className="h-[600px] bg-white/50 border-4 border-dashed border-orange-100 rounded-[50px] flex flex-col items-center justify-center opacity-40">
+                                    <Icon name="chef-hat" size={100} className="text-orange-200 mb-10" />
+                                    <h3 className="text-3xl font-black text-orange-950 tracking-tighter">MEJA MASAK KOSONG</h3>
+                                    <p className="font-bold text-gray-400 mt-4 px-10 text-center">Tuliskan bahanmu di samping untuk mulai menciptakan karya kuliner.</p>
+                                </div>
+                            )}
                         </div>
                     </main>
 
-                    {/* Sidebar Riwayat Resep */}
+                    {/* Sidebar Riwayat (Sejarah) */}
                     {showHistory && (
-                        <div className="fixed inset-0 z-[100] flex justify-end">
-                            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowHistory(false)}></div>
-                            <div className="relative w-full max-w-md bg-white h-full shadow-2xl p-8 md:p-10 overflow-y-auto animate-in slide-in-from-right duration-300">
-                                <div className="flex justify-between items-center mb-10 sticky top-0 bg-white z-10 pb-4 border-b">
-                                    <h2 className="text-2xl md:text-3xl font-black flex items-center gap-4"><i className="fas fa-history text-orange-500"></i> Riwayat Resep</h2>
-                                    <button onClick={() => setShowHistory(false)} className="w-10 h-10 hover:bg-gray-100 rounded-full flex items-center justify-center">
-                                        <i className="fas fa-times text-xl"></i>
-                                    </button>
+                        <div className="fixed inset-0 z-[100] flex justify-end fade-in">
+                            <div className="absolute inset-0 bg-orange-950/40 backdrop-blur-md" onClick={() => setShowHistory(false)}></div>
+                            <div className="relative w-full max-w-md bg-white h-full shadow-2xl p-8 overflow-y-auto">
+                                <div className="flex justify-between items-center mb-10 sticky top-0 bg-white pb-6 border-b">
+                                    <h2 className="text-2xl font-black text-orange-950 flex items-center gap-3"><Icon name="scroll" className="text-orange-500" /> Galeri Resep</h2>
+                                    <button onClick={() => setShowHistory(false)} className="p-3 hover:bg-gray-100 rounded-full"><Icon name="x" /></button>
                                 </div>
                                 <div className="space-y-6">
-                                    {history.map((item, idx) => {
-                                        // Gunakan fungsi yang sama untuk warna level di riwayat
-                                        const getDiffColor = (lvl) => {
-                                            if (lvl === "Sulit") return "bg-red-500";
-                                            if (lvl === "Sedang") return "bg-yellow-500";
-                                            return "bg-green-500";
-                                        };
-                                        
-                                        return (
-                                            <div key={idx} className="bg-orange-50 p-6 rounded-[30px] border border-orange-100 cursor-pointer hover:bg-white hover:shadow-xl transition-all flex gap-5 group" onClick={() => { setRecipe(item.content); setRecipeImage(item.image); setRecipeDifficulty(item.difficulty); setShowHistory(false); window.scrollTo(0,0); }}>
-                                                <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-lg flex-shrink-0 relative">
-                                                    {item.image ? <img src={item.image} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-orange-200"></div>}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <h4 className="font-bold text-orange-950 truncate mb-2 text-lg">{item.title}</h4>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <span className={`${getDiffColor(item.difficulty)} text-white text-[9px] font-black uppercase px-2 py-1 rounded-md`}>{item.difficulty}</span>
-                                                        <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest flex items-center gap-1"><i className="fas fa-clock"></i> {item.date}</p>
-                                                    </div>
-                                                    <div className="mt-2 text-orange-600 font-black text-[10px] uppercase group-hover:translate-x-1 transition-transform flex items-center gap-1">Buka Resep <i className="fas fa-chevron-right text-[8px]"></i></div>
-                                                </div>
+                                    {history.map((item, i) => (
+                                        <div key={i} className="flex gap-4 p-4 rounded-3xl border-2 border-orange-50 hover:border-orange-500 transition-all cursor-pointer group" onClick={() => { setRecipe(item.content); setRecipeImage(item.image); setDifficulty(item.difficulty); setShowHistory(false); window.scrollTo(0,0); }}>
+                                            <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-md group-hover:scale-105 transition-transform"><img src={item.image} className="w-full h-full object-cover" /></div>
+                                            <div className="flex-1 flex flex-col justify-center">
+                                                <h4 className="font-black text-orange-950 truncate mb-1">{item.title}</h4>
+                                                <div className="flex items-center gap-2"><div className={`w-2 h-2 rounded-full ${item.difficulty === 'Sulit' ? 'bg-red-500' : item.difficulty === 'Sedang' ? 'bg-yellow-500' : 'bg-green-500'}`}></div><span className="text-[10px] font-black text-gray-400">{new Date(item.createdAt).toLocaleDateString()}</span></div>
                                             </div>
-                                        );
-                                    })}
-                                    {history.length === 0 && <div className="text-center py-20"><i className="fas fa-folder-open text-gray-200 text-5xl mb-4 block"></i><p className="text-gray-400 font-bold">Belum ada resep yang tersimpan.</p></div>}
+                                        </div>
+                                    ))}
+                                    {history.length === 0 && <div className="text-center py-20 text-gray-400 italic">Belum ada riwayat resep...</div>}
                                 </div>
                             </div>
                         </div>
