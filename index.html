@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DapoerPintar - AI Kitchen Assistant</title>
-    <!-- Tailwind CSS & Lucide Icons -->
+    <!-- Tailwind CSS & FontAwesome Icons (Aman dari error React) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
         
@@ -23,6 +23,11 @@
             color: #9a3412; 
             margin-top: 1.5rem; 
             margin-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px dashed #ffedd5;
+            padding-bottom: 0.5rem;
         }
         .recipe-content p { 
             margin-bottom: 0.75rem; 
@@ -69,7 +74,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState } = React;
 
         const apiKey = ""; // API Key otomatis dari environment
 
@@ -82,10 +87,6 @@
             const [isLoading, setIsLoading] = useState(false);
             const [history, setHistory] = useState([]);
             const [showHistory, setShowHistory] = useState(false);
-
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            }, [isStarted, recipe, showHistory]);
 
             const generateImage = async (prompt) => {
                 try {
@@ -107,7 +108,22 @@
                 setRecipe("");
                 setRecipeImage(null);
 
-                const prompt = `Kamu adalah koki AI profesional. Buatlah resep kreatif menggunakan bahan: ${ingredients}. Alat masak: ${equipment || 'standar dapur'}. Format output harus Markdown: ## [Nama Resep] \n > [Cerita singkat tentang masakan] \n **Bahan:** \n - item \n **Langkah:** \n 1. step \n **Tips Koki:** [tips]`;
+                // Prompt yang sudah diperbarui dengan instruksi bendera dan asal negara
+                const prompt = `Kamu adalah koki AI profesional. Buatlah resep kreatif menggunakan bahan: ${ingredients}. Alat masak: ${equipment || 'standar dapur'}.
+Sertakan asal negara masakan tersebut dan emoji bendera negaranya di bagian judul.
+Format output HARUS Markdown persis seperti ini:
+
+## [Nama Resep] [Emoji Bendera]
+> **Asal:** [Nama Negara] - [Cerita singkat tentang masakan]
+
+**Bahan:**
+- item
+
+**Langkah:**
+1. step
+
+**Tips Koki:**
+[tips]`;
 
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
@@ -136,7 +152,7 @@
                     <div className="min-h-screen flex items-center justify-center p-6 bg-[#FFFBF0]">
                         <div className="max-w-md w-full bg-white rounded-[40px] shadow-2xl p-10 text-center border border-orange-100">
                             <div className="bg-orange-500 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-orange-500/30 rotate-3">
-                                <i data-lucide="chef-hat" className="text-white w-12 h-12"></i>
+                                <i className="fas fa-utensils text-white text-5xl"></i>
                             </div>
                             <h1 className="text-4xl font-black text-orange-900 mb-4 tracking-tighter">DapoerPintar</h1>
                             <p className="text-gray-500 font-medium mb-12">Sulap isi kulkasmu menjadi hidangan istimewa dalam sekejap.</p>
@@ -151,12 +167,12 @@
             return (
                 <div className="min-h-screen flex flex-col">
                     <header className="bg-white/80 backdrop-blur-md p-4 border-b sticky top-0 z-50 flex justify-between items-center px-6">
-                        <button onClick={() => setShowHistory(true)} className="p-3 hover:bg-orange-50 rounded-xl text-orange-600 transition-all">
-                            <i data-lucide="history"></i>
+                        <button onClick={() => setShowHistory(true)} className="p-3 hover:bg-orange-50 rounded-xl text-orange-600 transition-all inline-flex items-center justify-center">
+                            <i className="fas fa-clock-rotate-left text-xl"></i>
                         </button>
                         <h1 className="text-2xl font-black text-orange-900 tracking-tighter uppercase">Dapoer<span className="text-green-600">Pintar</span></h1>
                         <div className="w-10 h-10 bg-orange-100 rounded-xl flex items-center justify-center text-orange-600 border border-orange-200">
-                            <i data-lucide="user"></i>
+                            <i className="fas fa-user"></i>
                         </div>
                     </header>
 
@@ -164,7 +180,7 @@
                         <div className="lg:col-span-4 space-y-6">
                             <div className="bg-white p-6 rounded-[32px] shadow-xl border border-orange-50">
                                 <h3 className="font-bold text-gray-800 mb-6 flex items-center gap-2 text-lg">
-                                    <i data-lucide="refrigerator" className="text-orange-500"></i> Persiapan Bahan
+                                    <i className="fas fa-carrot text-orange-500"></i> Persiapan Bahan
                                 </h3>
                                 <div className="space-y-6">
                                     <div>
@@ -187,7 +203,7 @@
                                     </div>
                                 </div>
                                 <button onClick={handleGenerate} disabled={isLoading || !ingredients} className="w-full mt-8 bg-orange-500 text-white font-black py-5 rounded-2xl shadow-lg hover:bg-orange-600 disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2">
-                                    {isLoading ? <span className="loader" style={{width: 20, height: 20, borderWidth: 3}}></span> : <i data-lucide="wand-2"></i>}
+                                    {isLoading ? <span className="loader" style={{width: 20, height: 20, borderWidth: 3}}></span> : <i className="fas fa-wand-magic-sparkles"></i>}
                                     {isLoading ? "MERACIK..." : "BUAT RESEP"}
                                 </button>
                             </div>
@@ -205,7 +221,7 @@
                                         {recipeImage && <img src={recipeImage} className="w-full h-72 object-cover" alt="Masakan" />}
                                         <div className="p-8 md:p-12 recipe-content">
                                             {recipe.split('\n').map((line, i) => {
-                                                if(line.startsWith('##')) return <h2 key={i}>{line.replace('##', '')}</h2>;
+                                                if(line.startsWith('##')) return <h2 key={i}><span>{line.replace('##', '')}</span></h2>;
                                                 if(line.startsWith('>')) return <blockquote key={i}>{line.replace('>', '')}</blockquote>;
                                                 if(line.startsWith('-')) return <li key={i}>{line.replace('-', '')}</li>;
                                                 if(line.trim() === "") return <div key={i} className="h-2" />;
@@ -215,8 +231,8 @@
                                     </div>
                                 ) : (
                                     <div className="h-full flex flex-col items-center justify-center p-20 opacity-20 text-center">
-                                        <i data-lucide="soup" style={{width: 80, height: 80}} className="mb-4"></i>
-                                        <p className="font-black text-xl uppercase tracking-widest">Resep Akan Muncul Di Sini</p>
+                                        <i className="fas fa-bowl-food text-8xl mb-4 text-gray-400"></i>
+                                        <p className="font-black text-xl uppercase tracking-widest text-gray-400 mt-4">Resep Akan Muncul Di Sini</p>
                                     </div>
                                 )}
                             </div>
@@ -229,7 +245,9 @@
                             <div className="relative w-full max-w-md bg-white h-full shadow-2xl p-8 overflow-y-auto animate-in slide-in-from-right duration-500">
                                 <div className="flex justify-between items-center mb-10">
                                     <h2 className="text-2xl font-black">Riwayat Resep</h2>
-                                    <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 rounded-full"><i data-lucide="x"></i></button>
+                                    <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 rounded-full transition-all inline-flex items-center justify-center">
+                                        <i className="fas fa-times text-xl"></i>
+                                    </button>
                                 </div>
                                 <div className="space-y-4">
                                     {history.map((item, idx) => (
